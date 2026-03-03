@@ -43,6 +43,7 @@ export default function Home() {
         body: JSON.stringify({
           reviews: reviewsData.reviews,
           movieTitle: movieTitle,
+          movieId: imdbId,
         }),
       });
 

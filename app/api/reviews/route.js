@@ -52,7 +52,7 @@ export async function GET(request) {
 
         const reviewsData = await reviewsResponse.json();
         const reviews = (reviewsData.results || [])
-            .slice(0, 20)
+            .slice(0, 10)
             .map((review) => ({
                 author: review.author,
                 content: review.content.substring(0, 500), // Limit each review to 500 chars

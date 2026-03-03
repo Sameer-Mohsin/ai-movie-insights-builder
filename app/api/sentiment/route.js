@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+// Simple in-memory cache for sentiment results
+const sentimentCache = new Map();
+// Cache duration: 1 hour
+const CACHE_TTL = 60 * 60 * 1000;
+
 export async function POST(request) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
@@ -20,7 +25,19 @@ export async function POST(request) {
         );
     }
 
-    const { reviews, movieTitle } = body;
+    const { reviews, movieTitle, movieId } = body;
+
+    // 1. Check Cache first
+    const cacheKey = movieId || movieTitle;
+    if (cacheKey && sentimentCache.has(cacheKey)) {
+        const cached = sentimentCache.get(cacheKey);
+        if (Date.now() - cached.timestamp < CACHE_TTL) {
+            console.log(`Returning cached sentiment for: ${cacheKey}`);
+            return NextResponse.json(cached.data);
+        } else {
+            sentimentCache.delete(cacheKey);
+        }
+    }
 
     if (!reviews || !Array.isArray(reviews) || reviews.length === 0) {
         return NextResponse.json(
@@ -39,8 +56,8 @@ export async function POST(request) {
     try {
         const genAI = new GoogleGenerativeAI(apiKey);
 
-        // Try models in order: flash-lite has separate quota from flash
-        const models = ['gemini-2.0-flash-lite', 'gemini-2.0-flash'];
+        // Try models in order: gemini-1.5-flash is best for free tier stability
+        const models = ['gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-2.0-flash'];
 
         const reviewTexts = reviews
             .map((r, i) => `Review ${i + 1}: "${typeof r === 'string' ? r : r.content}"`)
@@ -68,10 +85,10 @@ Respond ONLY in the following JSON format, with no additional text:
             try {
                 return await model.generateContent(prompt);
             } catch (err) {
-                // If rate-limited, wait and retry once
+                // If rate-limited, wait and retry once with a longer delay
                 if (err.status === 429) {
-                    console.log(`Rate limited on ${modelName}, waiting 15s before retry...`);
-                    await new Promise((r) => setTimeout(r, 15000));
+                    console.log(`Rate limited on ${modelName}, waiting 20s before retry...`);
+                    await new Promise((r) => setTimeout(r, 20000));
                     return await model.generateContent(prompt);
                 }
                 throw err;
@@ -120,11 +137,21 @@ Respond ONLY in the following JSON format, with no additional text:
             sentiment.classification = sentiment.classification.toLowerCase();
         }
 
-        return NextResponse.json({
+        const finalResult = {
             summary: sentiment.summary,
             classification: sentiment.classification,
             themes: Array.isArray(sentiment.themes) ? sentiment.themes.slice(0, 5) : [],
-        });
+        };
+
+        // Cache the result
+        if (cacheKey) {
+            sentimentCache.set(cacheKey, {
+                timestamp: Date.now(),
+                data: finalResult
+            });
+        }
+
+        return NextResponse.json(finalResult);
     } catch (err) {
         console.error('Gemini API error:', err);
         return NextResponse.json(
