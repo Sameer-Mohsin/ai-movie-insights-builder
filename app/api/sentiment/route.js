@@ -56,8 +56,8 @@ export async function POST(request) {
     try {
         const genAI = new GoogleGenerativeAI(apiKey);
 
-        // Try models in order: gemini-1.5-flash is best for free tier stability
-        const models = ['gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-2.0-flash'];
+        // Try models in order: gemini-flash-latest is usually the most stable alias
+        const models = ['gemini-flash-latest', 'gemini-2.0-flash', 'gemini-2.0-flash-lite'];
 
         const reviewTexts = reviews
             .map((r, i) => `Review ${i + 1}: "${typeof r === 'string' ? r : r.content}"`)
